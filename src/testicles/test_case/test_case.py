@@ -94,9 +94,10 @@ class TestCase:
 
         return decorator(fn)
 
-    def run(self) -> Generator[Tuple[TestCase, TestResult | None], None, Tuple[TestCase, TestResult | None]]:
+    def run(self) -> Generator[Tuple[TestCase, TestResult | None], None, None]:
         if isinstance(self._result, SkipTestResult):
-            return (self, self._result)
+            yield (self, self._result)
+            return
         elif self._result is not None:
             raise Exception("Test has been already run.")
 
@@ -113,9 +114,9 @@ class TestCase:
             self._result = SuccessTestResult(started_at=started_at, ended_at=ended_at)
         except AssertException as e:
             ended_at = time.perf_counter()
-            self._result = FailTestResult("", [], started_at=started_at, ended_at=ended_at)
+            self._result = FailTestResult("", [str(e)], started_at=started_at, ended_at=ended_at)
         except Exception as e:
             ended_at = time.perf_counter()
             self._result = ErrorTestResult("", e, started_at=started_at, ended_at=ended_at)
 
-        return (self, self._result)
+        yield (self, self._result)

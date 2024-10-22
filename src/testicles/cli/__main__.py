@@ -2,14 +2,14 @@ import argparse
 import sys
 
 from testicles.loader import TestLoader
-from testicles.test_runner import TestRunner
+from testicles.test_runner import TextTestRunner
 
 loader = TestLoader()
 
 suites = loader.load("sandbox", load_suites=["unit", "integration"], top_level_dir=".") 
 
 for suite in suites:
-    TestRunner(suite).run()
+    TextTestRunner(suite).run()
 
 # cli_parser = argparse.ArgumentParser(description='CLI for test runs')
 
