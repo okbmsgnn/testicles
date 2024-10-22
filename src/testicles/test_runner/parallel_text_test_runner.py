@@ -8,7 +8,7 @@ from .test_runner import TestRunner
 
 TAB = "  "
 
-class TextTestRunner(TestRunner):
+class ParallelTextTestRunner(TestRunner):
     
     def __init__(self, suite: TestSuite) -> None:
         super().__init__(suite)

@@ -7,19 +7,26 @@ class TestSuite:
     _name: str
     _tests: List[TestCase]
     _cleanup_fns: List[Callable]
+    
+    @property
+    def tests(self):
+        return self._tests.copy()
 
     def __init__(self, name: str) -> None:
         self._name = name
         self._tests = []
         self._cleanup_fns = []
 
-    def test(self, name_or_description: str):
+    def test(self, name_or_description: str, *, skip: str | None = None):
         def decorator(fn: Callable):
-            test_case = TestCase(name_or_description, fn)
+            test_case = TestCase(name_or_description, fn, skip=skip)
             self._tests.append(test_case)
             return fn
 
         return decorator
+    
+    def unregister_test(self, test: TestCase):
+        self._tests.remove(test)
 
     def run(self):
         self.before_all()

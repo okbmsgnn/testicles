@@ -1,3 +1,4 @@
+import fnmatch
 import os
 import re
 import sys
@@ -14,13 +15,13 @@ class TestLoader:
     def __init__(self) -> None:
         pass
 
-    def load(self, start_dir: str, /, *, load_suites: List[str] | None = None, pattern = r"^test_.+\.py$", top_level_dir: str | None = None):
+    def load(self, start_dir: str, pattern: str, /, *, load_suites: List[str] | None = None, top_level_dir: str | None = None):
         self._start_dir = start_dir = os.path.abspath(start_dir or "tests")
         self._top_level_dir = top_level_dir = os.path.abspath(top_level_dir or ".")
 
         if not top_level_dir in sys.path:
             sys.path.insert(0, top_level_dir)
-        
+
         is_importable = True
         if os.path.isdir(start_dir):
             if start_dir != top_level_dir:
@@ -31,12 +32,11 @@ class TestLoader:
         if not is_importable:
             raise ImportError(f"Start directory is not importable: {start_dir}")
 
-        pattern = re.compile(pattern)
         suites = set(self._find_suites(start_dir, pattern, load_suites=load_suites))
-        
+
         return suites
 
-    def _find_suites(self, start_dir: str, pattern: re.Pattern, /, *, load_suites: List[str] | None = None):
+    def _find_suites(self, start_dir: str, pattern: str, /, *, load_suites: List[str] | None = None):
         paths = sorted(os.listdir(start_dir))
 
         for path in paths:
@@ -48,7 +48,7 @@ class TestLoader:
                     continue
 
                 # filter our files that do not match
-                if not pattern.match(basename):
+                if not fnmatch.fnmatch(full_path, pattern):
                     continue
 
                 yield from self._load_suites_from_path(full_path, load_suites=load_suites)

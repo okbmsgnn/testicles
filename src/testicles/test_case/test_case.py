@@ -5,7 +5,7 @@ import time
 from typing import Callable, Generator, List, Optional, Tuple
 
 from testicles._assert import Assert
-from testicles.exceptions import AssertException
+from testicles.exceptions import AssertException, SkipTestException
 from testicles.test_case.test_result import (ErrorTestResult, FailTestResult,
                                              SkipTestResult, SuccessTestResult,
                                              TestResult)
@@ -37,12 +37,14 @@ class TestCase:
     def should(self):
         return self._should
 
-    def __init__(self, name_or_description: str, fn: Callable, /, *, parent: TestCase | None = None) -> None:
+    def __init__(self, name_or_description: str, fn: Callable, /, *, parent: TestCase | None = None, skip: str | None = None) -> None:
         self._fn = fn
         self._parent = parent
         self._subtests = []
         self._name_or_description = name_or_description
         self._should = Assert()
+        if skip:
+            self._result = SkipTestResult(skip)
 
     def _get_full_name(self):
         parts = [self._name_or_description]
@@ -81,11 +83,11 @@ class TestCase:
         return self._register_hook(fn, self.after_each.__name__)
     
     def skip(self, reason: str):
-        self._result = SkipTestResult(reason)
+        raise SkipTestException(reason)
 
-    def subtest(self, fn: Callable | None = None, /, *, name_or_description: str | None = None):
+    def subtest(self, fn: Callable | None = None, /, *, name_or_description: str | None = None, skip: str | None = None):
         def decorator(fn: Callable):
-            test_case = TestCase(name_or_description or fn.__name__, fn, parent=self)
+            test_case = TestCase(name_or_description or fn.__name__, fn, parent=self, skip=skip)
             self._subtests.append(test_case)
             return fn
 
@@ -98,7 +100,7 @@ class TestCase:
         if isinstance(self._result, SkipTestResult):
             yield (self, self._result)
             return
-        elif self._result is not None:
+        if self._result is not None:
             raise Exception("Test has been already run.")
 
         yield (self, None)
@@ -112,6 +114,8 @@ class TestCase:
 
             ended_at = time.perf_counter()
             self._result = SuccessTestResult(started_at=started_at, ended_at=ended_at)
+        except SkipTestException as e:
+            self._result = SkipTestResult(e.reason)
         except AssertException as e:
             ended_at = time.perf_counter()
             self._result = FailTestResult("", [str(e)], started_at=started_at, ended_at=ended_at)
