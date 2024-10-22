@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import functools
 import time
-import traceback
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Generator, List, Optional, Tuple
 
 from testicles._assert import Assert
 from testicles.exceptions import AssertException
@@ -14,7 +13,8 @@ from testicles.test_case.test_result import (ErrorTestResult, FailTestResult,
 
 class TestCase:
     
-    _fn: Callable | None
+    _parent: TestCase | None
+    _fn: Callable
     _subtests: List[TestCase]
 
     _before_all: Optional[Callable]
@@ -32,16 +32,27 @@ class TestCase:
     def result(self):
         return self._result
 
-    _assert: Assert
-    @property    
-    def assert_(self):
-        return self._assert
+    _should: Assert
+    @property
+    def should(self):
+        return self._should
 
-    def __init__(self, name_or_description: str, /, fn: Callable | None) -> None:
+    def __init__(self, name_or_description: str, fn: Callable, /, *, parent: TestCase | None = None) -> None:
         self._fn = fn
+        self._parent = parent
         self._subtests = []
         self._name_or_description = name_or_description
-        self._assert = Assert()
+        self._should = Assert()
+
+    def _get_full_name(self):
+        parts = [self._name_or_description]
+
+        parent = self._parent
+        while parent is not None:
+            parts.insert(0, parent._name_or_description)
+            parent = parent._parent
+            
+        return parts
 
     def _register_hook(self, fn: Callable, hook_name: str):
         key = f"_{hook_name}"
@@ -72,46 +83,39 @@ class TestCase:
     def skip(self, reason: str):
         self._result = SkipTestResult(reason)
 
-    def subtest(self, name_or_description: str):
+    def subtest(self, fn: Callable | None = None, /, *, name_or_description: str | None = None):
         def decorator(fn: Callable):
-            test_case = TestCase(name_or_description, fn=fn)
+            test_case = TestCase(name_or_description or fn.__name__, fn, parent=self)
             self._subtests.append(test_case)
             return fn
 
-        return decorator
+        if fn is None:
+            return decorator
 
-    def run(self, fn: Callable | None = None):
+        return decorator(fn)
+
+    def run(self) -> Generator[Tuple[TestCase, TestResult | None], None, Tuple[TestCase, TestResult | None]]:
         if isinstance(self._result, SkipTestResult):
-            return self._result
+            return (self, self._result)
         elif self._result is not None:
             raise Exception("Test has been already run.")
+
+        yield (self, None)
 
         started_at = time.perf_counter()
 
         try:
-            self._fn = self._fn or fn
-            if self._fn is None:
-                raise Exception("\"fn\" was not provided.")
             self._fn(self)
             for subtest in self._subtests:
-                result = subtest.run()
-                if isinstance(result, SuccessTestResult):
-                    print(f"{subtest.name_or_description} | SUCCESS | {result.get_execution_ms():.4f}s")
-                elif isinstance(result, FailTestResult):
-                    print(f"{subtest.name_or_description} | FAIL    | {result.get_execution_ms():.4f}s")
-                elif isinstance(result, ErrorTestResult):
-                    description, error = result.get_full_description()
-                    print(f"{subtest.name_or_description} | ERROR   | {result.get_execution_ms():.4f}s | {description} | {error}")
-                    traceback.print_exception(error)
+                yield from subtest.run()
 
             ended_at = time.perf_counter()
             self._result = SuccessTestResult(started_at=started_at, ended_at=ended_at)
-            return self._result
         except AssertException as e:
             ended_at = time.perf_counter()
             self._result = FailTestResult("", [], started_at=started_at, ended_at=ended_at)
-            return self._result
         except Exception as e:
             ended_at = time.perf_counter()
             self._result = ErrorTestResult("", e, started_at=started_at, ended_at=ended_at)
-            return self._result
+
+        return (self, self._result)
